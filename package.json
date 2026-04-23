@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-minimax-vits-plus",
   "description": "基于 koishi-plugin-minimax-vits 改进版，使用 MiniMax TTS 生成语音，深度适配 ChatLuna",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "lib/index.js",
   "module": "esm/index.js",
   "types": "lib/index.d.ts",
