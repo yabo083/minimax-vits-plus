@@ -1,10 +1,11 @@
 // src/index.ts
 // 主入口文件
-import { Schema } from 'koishi';
+
 import { AudioCacheManager } from './cache';
 import { MinimaxVitsService } from './service';
 import { generateSpeech } from './api';
-import { isWeixinLikePlatform, makeAudioElement, makeWeixinAudioElement, removeTempFile, writeTempAudioFile, } from './utils';
+import { isWeixinLikePlatform, makeAudioElement, makeWeixinAudioElement, removeTempFile, writeTempAudioFile, isOneBotPlatform, convertToSilk, } from './utils';
+import { Schema, h } from 'koishi';
 import { selectSpeechSentenceByAI } from './tool';
 export const name = 'minimax-vits';
 // ==========================================
@@ -300,13 +301,16 @@ export function apply(ctx, config) {
                 const segments = splitTextIntoSegments(targetText);
                 if (segments.length === 0)
                     return;
-                const audioBuffers = await Promise.all(segments.map(seg => generateSpeech(ctx, config, seg, config.defaultVoice, cacheManager)));
+                const isWeixin = isWeixinLikePlatform(session === null || session === void 0 ? void 0 : session.platform);
+                const isOneBot = isOneBotPlatform(session === null || session === void 0 ? void 0 : session.platform);
+                // OneBot/QQ 需要 SILK 格式，silk-wasm 仅支持 WAV → SILK
+                const apiFormat = isOneBot ? 'wav' : undefined;
+                const audioBuffers = await Promise.all(segments.map(seg => generateSpeech(ctx, config, seg, config.defaultVoice, cacheManager, apiFormat)));
                 const validBuffers = audioBuffers.filter((b) => b !== null);
                 if (validBuffers.length === 0)
                     return;
                 const finalBuffer = Buffer.concat(validBuffers);
                 const sendMode = (_e = (_d = config.autoSpeech) === null || _d === void 0 ? void 0 : _d.sendMode) !== null && _e !== void 0 ? _e : 'text_and_voice';
-                const isWeixin = isWeixinLikePlatform(session === null || session === void 0 ? void 0 : session.platform);
                 if (isWeixin) {
                     const tempAudioPath = await writeTempAudioFile(finalBuffer, (_f = config.audioFormat) !== null && _f !== void 0 ? _f : 'mp3');
                     const audioElem = makeWeixinAudioElement(tempAudioPath);
@@ -328,6 +332,30 @@ export function apply(ctx, config) {
                         setTimeout(() => {
                             void removeTempFile(tempAudioPath);
                         }, 60000);
+                    }
+                }
+                else if (isOneBot) {
+                    // OneBot/QQ: 尝试转换为 SILK 格式
+                    const silkBuffer = await convertToSilk(finalBuffer, logger);
+                    let audioElem;
+                    if (silkBuffer) {
+                        audioElem = h.audio(silkBuffer, 'audio/silk');
+                        if (config.debug)
+                            logger.info(`使用 SILK 格式发送语音，大小: ${silkBuffer.length} bytes`);
+                    }
+                    else {
+                        audioElem = makeAudioElement(finalBuffer, 'wav');
+                        if (config.debug)
+                            logger.info('SILK 转换失败，使用原始 WAV 格式发送');
+                    }
+                    if (sendMode === 'voice_only') {
+                        await session.send(audioElem);
+                    }
+                    else if (sendMode === 'mixed') {
+                        await session.send(targetText + audioElem);
+                    }
+                    else {
+                        await session.send(audioElem);
                     }
                 }
                 else {
@@ -380,25 +408,34 @@ export function apply(ctx, config) {
         .option('voice', '-v <voice>')
         .option('speed', '-s <speed>', { type: 'number' })
         .action(async ({ session, options }, text) => {
-        var _a, _b, _c;
+        var _a, _b;
         if (!text)
             return '请输入文本';
         await (session === null || session === void 0 ? void 0 : session.send('生成中...'));
+        const isWeixin = isWeixinLikePlatform(session === null || session === void 0 ? void 0 : session.platform);
+        const isOneBot = isOneBotPlatform(session === null || session === void 0 ? void 0 : session.platform);
+        const apiFormat = isOneBot ? 'wav' : undefined;
         const buffer = await generateSpeech(ctx, {
             ...config,
             speed: (_a = options === null || options === void 0 ? void 0 : options.speed) !== null && _a !== void 0 ? _a : config.speed
-        }, text, (options === null || options === void 0 ? void 0 : options.voice) || config.defaultVoice || 'Chinese_female_gentle', cacheManager);
+        }, text, (options === null || options === void 0 ? void 0 : options.voice) || config.defaultVoice || 'Chinese_female_gentle', cacheManager, apiFormat);
         if (!buffer)
             return '失败';
-        const isWeixin = isWeixinLikePlatform(session === null || session === void 0 ? void 0 : session.platform);
-        if (!isWeixin) {
-            return makeAudioElement(buffer, (_b = config.audioFormat) !== null && _b !== void 0 ? _b : 'mp3');
+        if (isWeixin) {
+            const tempAudioPath = await writeTempAudioFile(buffer, (_b = config.audioFormat) !== null && _b !== void 0 ? _b : 'mp3');
+            setTimeout(() => {
+                void removeTempFile(tempAudioPath);
+            }, 60000);
+            return makeWeixinAudioElement(tempAudioPath);
         }
-        const tempAudioPath = await writeTempAudioFile(buffer, (_c = config.audioFormat) !== null && _c !== void 0 ? _c : 'mp3');
-        setTimeout(() => {
-            void removeTempFile(tempAudioPath);
-        }, 60000);
-        return makeWeixinAudioElement(tempAudioPath);
+        if (isOneBot) {
+            const silkBuffer = await convertToSilk(buffer, logger);
+            if (silkBuffer) {
+                return h.audio(silkBuffer, 'audio/silk');
+            }
+            return makeAudioElement(buffer, 'wav');
+        }
+        return makeAudioElement(buffer, config.audioFormat || 'mp3');
     });
 }
 export default {

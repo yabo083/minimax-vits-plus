@@ -105,6 +105,36 @@ export function makeWeixinAudioElement(filePath) {
     return h('audio', { src: fileUrl });
 }
 /**
+ * 判断是否为 OneBot/QQ 平台
+ */
+export function isOneBotPlatform(platform) {
+    if (!platform)
+        return false;
+    const lower = String(platform).toLowerCase();
+    return lower === 'onebot' || lower.includes('onebot');
+}
+/**
+ * 将音频转换为 SILK 格式（用于 QQ 等需要 SILK 的适配器）
+ * silk-wasm 仅支持 WAV → SILK，MP3 无法直接转换
+ */
+export async function convertToSilk(audioBuffer, logger) {
+    try {
+        const silk = await import('silk-wasm');
+        if (silk.isWav(audioBuffer)) {
+            const info = silk.getWavFileInfo(audioBuffer);
+            const result = await silk.encode(audioBuffer, info.fmt.sampleRate);
+            logger.info(`转换为 SILK 成功，时长: ${result.duration}ms`);
+            return Buffer.from(result.data);
+        }
+        logger.info('音频非 WAV 格式，跳过 SILK 转换');
+        return null;
+    }
+    catch (err) {
+        logger.info(`SILK 转换跳过 (silk-wasm 未安装或转换失败): ${err}`);
+        return null;
+    }
+}
+/**
  * 删除临时文件（忽略异常）
  */
 export async function removeTempFile(filePath) {

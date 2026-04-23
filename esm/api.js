@@ -1,4 +1,4 @@
-export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
+export async function generateSpeech(ctx, config, text, voiceId, cacheManager, overrideFormat) {
     var _a, _b, _c, _d, _e, _f, _g;
     const logger = ctx.logger('minimax-vits');
     // 强制打印调用信息，便于排查为何无输出或无调用
@@ -44,7 +44,7 @@ export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
             audio_setting: {
                 sample_rate: (_e = config.sampleRate) !== null && _e !== void 0 ? _e : 32000,
                 bitrate: (_f = config.bitrate) !== null && _f !== void 0 ? _f : 128000,
-                format: (_g = config.audioFormat) !== null && _g !== void 0 ? _g : 'mp3',
+                format: overrideFormat || ((_g = config.audioFormat) !== null && _g !== void 0 ? _g : 'mp3'),
                 channel: 1
             }
         };

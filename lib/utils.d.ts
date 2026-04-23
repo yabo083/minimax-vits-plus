@@ -35,3 +35,11 @@ export declare function makeWeixinAudioElement(filePath: string): h;
  * 删除临时文件（忽略异常）
  */
 export declare function removeTempFile(filePath?: string): Promise<void>;
+/**
+ * 判断是否为 OneBot/QQ 平台
+ */
+export declare function isOneBotPlatform(platform?: string): boolean;
+/**
+ * 将音频转换为 SILK 格式（用于 QQ 等需要 SILK 的适配器）
+ */
+export declare function convertToSilk(audioBuffer: Buffer, logger: any): Promise<Buffer | null>;
