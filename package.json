@@ -45,12 +45,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yushangjianghe-cell/minimax-vits.git"
+    "url": "git+https://github.com/gt4404gb/minimax-vits-plus.git"
   },
   "bugs": {
-    "url": "https://github.com/yushangjianghe-cell/minimax-vits/issues"
+    "url": "https://github.com/gt4404gb/minimax-vits-plus/issues"
   },
-  "homepage": "https://github.com/yushangjianghe-cell/minimax-vits#readme",
+  "homepage": "https://github.com/gt4404gb/minimax-vits-plus#readme",
   "koishi": {
     "preview": true,
     "description": {
