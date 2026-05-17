@@ -1,9 +1,11 @@
 // src/index.ts
 // 主入口文件
 import { Context, Schema, h } from 'koishi'
+import fs from 'node:fs'
+import path from 'node:path'
 import type { Config as ConfigType } from './types'
 import { AudioCacheManager } from './cache'
-import { MinimaxVitsService } from './service'
+import { MinimaxVitsNativeVitsService, MinimaxVitsService } from './service'
 import { generateSpeech, uploadFile } from './api'
 import {
   isWeixinLikePlatform,
@@ -13,7 +15,7 @@ import {
   removeTempFile,
   writeTempAudioFile,
 } from './utils'
-import { selectSpeechSentenceByAI } from './tool'
+import { MinimaxVitsTool, selectSpeechSentenceByAI } from './tool'
 
 export const name = 'minimax-vits'
 
@@ -241,6 +243,20 @@ export const schema: Schema<ConfigType> = Schema.object({
   cacheDir: Schema.string().default('./data/minimax-vits/cache').description('缓存路径'),
   cacheMaxAge: Schema.number().default(3600000).min(60000).description('缓存有效期(ms)'),
   cacheMaxSize: Schema.number().default(104857600).min(1048576).max(1073741824).description('缓存最大体积(bytes)'),
+  publicBaseUrl: Schema.string().default('').description('公开访问根地址（兼容旧配置；建议改用工具设置中的 publicBaseUrl）'),
+  vits: Schema.object({
+    speakerMap: Schema.dict(String).description('ChatLuna <voice id="数字"> 到 MiniMax voice_id 的映射；未命中时使用默认音色'),
+  }).description('ChatLuna Character 原生 VITS 服务设置'),
+  tool: Schema.object({
+    enabled: Schema.boolean().default(false).description('向 ChatLuna 暴露语音生成工具（兼容旧方案；Character 原生语音建议保持关闭）'),
+    name: Schema.string().default('minimax_vits_speech').description('ChatLuna 工具名'),
+    description: Schema.string().role('textarea')
+      .default('Convert selected assistant dialogue text into a MiniMax VITS audio message. Use only when the user wants voice output or when speaking aloud would improve the reply.')
+      .description('工具描述'),
+    localPublicPath: Schema.string().default('/minimax-vits').description('本地音频 HTTP 路由前缀'),
+    publicBaseUrl: Schema.string().default('').description('公网/局域网访问根地址，例如 http://127.0.0.1:5140'),
+    outputDir: Schema.string().default('./data/minimax-vits/tool').description('工具生成音频保存目录'),
+  }).description('ChatLuna 工具设置'),
 }).description('MiniMax VITS 配置')
 
 // 兼容旧版本
@@ -278,12 +294,77 @@ export function apply(ctx: Context, config: ConfigType) {
   }
 
   // ======================================================
-  // 2. 核心逻辑：消息拦截与自动语音转换
+  // 2. ChatLuna 工具注册与工具音频 HTTP 分发
   // ======================================================
-  // 我们不再尝试注册 ChatLuna Tool，而是直接监听所有发出的消息
+  const toolConfig = config.tool || {} as NonNullable<ConfigType['tool']>
+  const toolPublicPath = String(toolConfig.localPublicPath || '/minimax-vits').replace(/\/$/, '') || '/minimax-vits'
+
+  if (state.minimaxNativeVitsService) {
+    state.minimaxNativeVitsService.updateConfig(config, cacheManager).catch((err: any) => {
+      logger.warn('更新 ChatLuna VITS 服务配置失败:', err)
+    })
+  } else {
+    state.minimaxNativeVitsService = new MinimaxVitsNativeVitsService(ctx, config, cacheManager)
+    ctx.set('vits', state.minimaxNativeVitsService)
+    logger.info('registered ChatLuna native vits service')
+  }
+
+  ctx.inject(['server'], (ctx2: any) => {
+    if (!ctx2.server) return
+    ctx2.server.get(`${toolPublicPath}/audio/:name`, async (koa: any) => {
+      const filename = String(koa.params?.name || '')
+      if (!/^[a-f0-9]{16,64}\.mp3$/i.test(filename)) {
+        koa.status = 400
+        return
+      }
+
+      const file = path.join(
+        path.resolve(ctx2.baseDir, toolConfig.outputDir || './data/minimax-vits/tool'),
+        filename,
+      )
+      try {
+        koa.set('Content-Type', 'audio/mpeg')
+        koa.body = fs.createReadStream(file)
+      } catch {
+        koa.status = 404
+      }
+    })
+  })
+
+  const registerChatLunaTool = (ctx2: any) => {
+    if ((toolConfig.enabled ?? true) === false) return
+    if (!ctx2.chatluna?.platform?.registerTool) {
+      ctx2.logger(name).warn('ChatLuna platform is unavailable; skip registering minimax VITS tool.')
+      return
+    }
+
+    const toolName = String(toolConfig.name || 'minimax_vits_speech').trim() || 'minimax_vits_speech'
+    ctx2.effect(() => ctx2.chatluna.platform.registerTool(toolName, {
+      description: toolConfig.description || 'Convert selected assistant dialogue text into a MiniMax VITS audio message.',
+      selector() {
+        return true
+      },
+      createTool() {
+        return new MinimaxVitsTool(ctx2, config, cacheManager)
+      },
+      meta: {
+        source: 'extension',
+        group: 'minimax-vits',
+        tags: ['tts', 'voice', 'minimax', 'vits'],
+        defaultAvailability: {
+          enabled: true,
+          main: true,
+          chatluna: true,
+          characterScope: 'all',
+        },
+      },
+    }))
+    ctx2.logger(name).info('registered ChatLuna VITS tool: %s', toolName)
+  }
+  ctx.inject(['chatluna'], registerChatLunaTool)
   
   // ======================================================
-  // 2. 核心逻辑：ChatLuna 对话后自动语音转换
+  // 3. 核心逻辑：ChatLuna 对话后自动语音转换
   // ======================================================
   // 使用 ChatLuna 的 after-chat 事件精确拦截 AI 对话
   
@@ -409,9 +490,6 @@ export function apply(ctx: Context, config: ConfigType) {
         if (ctxWithConsole.console) {
           if (typeof ctxWithConsole.console.addService === 'function') {
             ctxWithConsole.console.addService('minimax-vits', state.minimaxVitsService);
-          } else {
-            ctxWithConsole.console.services = ctxWithConsole.console.services || {};
-            ctxWithConsole.console.services['minimax-vits'] = state.minimaxVitsService;
           }
         }
       }
@@ -431,6 +509,7 @@ export function apply(ctx: Context, config: ConfigType) {
     state.cacheManager?.dispose();
     delete state.cacheManager;
     delete state.minimaxVitsService;
+    delete state.minimaxNativeVitsService;
   })
 
   // ======================================================

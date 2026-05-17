@@ -70,6 +70,12 @@ export function isWeixinLikePlatform(platform) {
     const lower = String(platform).toLowerCase();
     return lower.includes('weixin') || lower.includes('openclaw');
 }
+export function isOneBotPlatform(platform) {
+    if (!platform)
+        return false;
+    const lower = String(platform).toLowerCase();
+    return lower.includes('onebot') || lower === 'qq';
+}
 /**
  * 构建音频消息元素（data-uri）
  */
@@ -115,5 +121,22 @@ export async function removeTempFile(filePath) {
     }
     catch {
         // ignore
+    }
+}
+export async function convertToSilk(buffer, logger) {
+    var _a, _b, _c, _d;
+    try {
+        const silk = await import('silk-wasm');
+        const encode = silk.encode || ((_a = silk.default) === null || _a === void 0 ? void 0 : _a.encode);
+        if (typeof encode !== 'function') {
+            (_b = logger === null || logger === void 0 ? void 0 : logger.warn) === null || _b === void 0 ? void 0 : _b.call(logger, 'silk-wasm encode function is unavailable');
+            return null;
+        }
+        const result = await encode(buffer, 24000);
+        return Buffer.from((_c = result === null || result === void 0 ? void 0 : result.data) !== null && _c !== void 0 ? _c : result);
+    }
+    catch (error) {
+        (_d = logger === null || logger === void 0 ? void 0 : logger.warn) === null || _d === void 0 ? void 0 : _d.call(logger, 'SILK conversion failed:', error);
+        return null;
     }
 }

@@ -1,4 +1,4 @@
-export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
+export async function generateSpeech(ctx, config, text, voiceId, cacheManager, overrideFormat) {
     var _a, _b, _c, _d, _e, _f, _g;
     const logger = ctx.logger('minimax-vits');
     // 强制打印调用信息，便于排查为何无输出或无调用
@@ -8,6 +8,7 @@ export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
     catch (e) {
         // ignore
     }
+    const audioFormat = (_b = overrideFormat !== null && overrideFormat !== void 0 ? overrideFormat : config.audioFormat) !== null && _b !== void 0 ? _b : 'mp3';
     // 1. 尝试读取缓存
     if (cacheManager) {
         // 构造缓存参数标识
@@ -15,7 +16,7 @@ export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
             speed: config.speed,
             vol: config.vol,
             pitch: config.pitch,
-            format: config.audioFormat
+            format: audioFormat
         };
         const cached = await cacheManager.getAudio(text, voiceId, cacheParams);
         if (cached) {
@@ -37,14 +38,14 @@ export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
             output_format: 'hex', // 必填：hex 格式输出
             voice_setting: {
                 voice_id: voiceId,
-                speed: (_b = config.speed) !== null && _b !== void 0 ? _b : 1.0,
-                vol: (_c = config.vol) !== null && _c !== void 0 ? _c : 1.0,
-                pitch: (_d = config.pitch) !== null && _d !== void 0 ? _d : 0
+                speed: (_c = config.speed) !== null && _c !== void 0 ? _c : 1.0,
+                vol: (_d = config.vol) !== null && _d !== void 0 ? _d : 1.0,
+                pitch: (_e = config.pitch) !== null && _e !== void 0 ? _e : 0
             },
             audio_setting: {
-                sample_rate: (_e = config.sampleRate) !== null && _e !== void 0 ? _e : 32000,
-                bitrate: (_f = config.bitrate) !== null && _f !== void 0 ? _f : 128000,
-                format: (_g = config.audioFormat) !== null && _g !== void 0 ? _g : 'mp3',
+                sample_rate: (_f = config.sampleRate) !== null && _f !== void 0 ? _f : 32000,
+                bitrate: (_g = config.bitrate) !== null && _g !== void 0 ? _g : 128000,
+                format: audioFormat,
                 channel: 1
             }
         };
@@ -63,9 +64,9 @@ export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
             logger.info('TTS 请求 payload (unserializable)');
         }
         logger.info('TTS 请求 headers:', {
-            Authorization: `Bearer ${config.ttsApiKey}`,
+            Authorization: config.ttsApiKey ? 'Bearer ***' : '',
             'Content-Type': 'application/json',
-            'Tts-Group-Id': config.groupId || ''
+            'Tts-Group-Id': config.groupId ? '***' : ''
         });
         const response = await ctx.http.post(`${config.apiBase}/t2a_v2`, payload, {
             headers: {
@@ -132,7 +133,7 @@ export async function generateSpeech(ctx, config, text, voiceId, cacheManager) {
                 speed: config.speed,
                 vol: config.vol,
                 pitch: config.pitch,
-                format: config.audioFormat
+                format: audioFormat
             };
             // 修正：参数顺序调整为 (text, voiceId, params, buffer)
             await cacheManager.saveAudio(text, voiceId, cacheParams, audioBuffer);

@@ -79,6 +79,12 @@ export function isWeixinLikePlatform(platform?: string): boolean {
   return lower.includes('weixin') || lower.includes('openclaw')
 }
 
+export function isOneBotPlatform(platform?: string): boolean {
+  if (!platform) return false
+  const lower = String(platform).toLowerCase()
+  return lower.includes('onebot') || lower === 'qq'
+}
+
 /**
  * 构建音频消息元素（data-uri）
  */
@@ -126,5 +132,21 @@ export async function removeTempFile(filePath?: string): Promise<void> {
     await fs.unlink(filePath)
   } catch {
     // ignore
+  }
+}
+
+export async function convertToSilk(buffer: Buffer, logger?: any): Promise<Buffer | null> {
+  try {
+    const silk = await import('silk-wasm')
+    const encode = (silk as any).encode || (silk as any).default?.encode
+    if (typeof encode !== 'function') {
+      logger?.warn?.('silk-wasm encode function is unavailable')
+      return null
+    }
+    const result = await encode(buffer, 24000)
+    return Buffer.from(result?.data ?? result)
+  } catch (error) {
+    logger?.warn?.('SILK conversion failed:', error)
+    return null
   }
 }

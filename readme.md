@@ -7,6 +7,7 @@
 ## 特性
 
 - **ChatLuna 深度集成**：监听 ChatLuna 对话事件，AI 回复自动转语音发送
+- **ChatLuna 工具模式**：向 ChatLuna 暴露 `minimax_vits_speech`，让模型在需要时主动生成语音
 - **智能语音筛选**：支持多种策略选择最适合朗读的内容（整条/AI挑选/OpenAI筛选）
 - **音频缓存**：自动缓存已生成的音频，减少 API 调用
 - **灵活发送模式**：仅语音 / 语音+文本混合 / 分开发送
@@ -34,6 +35,20 @@ yarn add koishi-plugin-minimax-vits
 | pitch | 音调 | 0 |
 | audioFormat | 音频格式 | mp3 |
 | sampleRate | 采样率 | 32000 |
+
+### ChatLuna 工具模式
+
+插件默认注册 `minimax_vits_speech` 工具。模型可以在用户希望听语音、角色需要开口、或语音比纯文本更自然时调用该工具。
+
+工具会生成 MP3 到本地目录，并返回可发送的 `<audio src="..."/>`：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| tool.enabled | 向 ChatLuna 注册语音生成工具 | true |
+| tool.name | ChatLuna 工具名 | minimax_vits_speech |
+| tool.localPublicPath | 音频 HTTP 路由前缀 | /minimax-vits |
+| tool.publicBaseUrl | 可被聊天平台访问的 Koishi 根地址 | - |
+| tool.outputDir | 工具生成音频保存目录 | ./data/minimax-vits/tool |
 
 ### 自动语音转换
 

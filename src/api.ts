@@ -8,7 +8,8 @@ export async function generateSpeech(
   config: Config,
   text: string,
   voiceId: string,
-  cacheManager?: AudioCacheManager
+  cacheManager?: AudioCacheManager,
+  overrideFormat?: 'mp3' | 'wav'
 ): Promise<Buffer | null> {
   const logger = ctx.logger('minimax-vits')
 
@@ -19,6 +20,8 @@ export async function generateSpeech(
     // ignore
   }
 
+  const audioFormat = overrideFormat ?? config.audioFormat ?? 'mp3'
+
   // 1. 尝试读取缓存
   if (cacheManager) {
     // 构造缓存参数标识
@@ -26,7 +29,7 @@ export async function generateSpeech(
       speed: config.speed,
       vol: config.vol,
       pitch: config.pitch,
-      format: config.audioFormat
+      format: audioFormat
     }
     
     const cached = await cacheManager.getAudio(text, voiceId, cacheParams)
@@ -57,7 +60,7 @@ export async function generateSpeech(
       audio_setting: {
         sample_rate: config.sampleRate ?? 32000,
         bitrate: config.bitrate ?? 128000,
-        format: config.audioFormat ?? 'mp3',
+        format: audioFormat,
         channel: 1
       }
     }
@@ -78,9 +81,9 @@ export async function generateSpeech(
       logger.info('TTS 请求 payload (unserializable)')
     }
     logger.info('TTS 请求 headers:', {
-      Authorization: `Bearer ${config.ttsApiKey}`,
+      Authorization: config.ttsApiKey ? 'Bearer ***' : '',
       'Content-Type': 'application/json',
-      'Tts-Group-Id': config.groupId || ''
+      'Tts-Group-Id': config.groupId ? '***' : ''
     })
 
     const response = await ctx.http.post(
@@ -158,7 +161,7 @@ export async function generateSpeech(
         speed: config.speed,
         vol: config.vol,
         pitch: config.pitch,
-        format: config.audioFormat
+        format: audioFormat
       }
       // 修正：参数顺序调整为 (text, voiceId, params, buffer)
       await cacheManager.saveAudio(text, voiceId, cacheParams, audioBuffer)

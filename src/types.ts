@@ -37,4 +37,18 @@ export interface Config {
   cacheDir: string
   cacheMaxAge: number
   cacheMaxSize: number
+
+  // ChatLuna 工具配置
+  publicBaseUrl?: string
+  vits?: {
+    speakerMap?: Record<string, string>
+  }
+  tool?: {
+    enabled: boolean
+    name: string
+    description: string
+    localPublicPath: string
+    publicBaseUrl?: string
+    outputDir: string
+  }
 }

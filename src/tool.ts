@@ -1,19 +1,97 @@
-import { Context, Schema, h } from 'koishi'
+import { Context } from 'koishi'
+import { StructuredTool } from '@langchain/core/tools'
+import { z } from 'zod'
+import { createHash } from 'node:crypto'
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 import type { Config as ConfigType } from './types'
 import { AudioCacheManager } from './cache'
-import { MinimaxVitsService } from './service'
-import { generateSpeech, uploadFile, cloneVoice } from './api'
-import { makeAudioElement } from './utils'
+import { generateSpeech } from './api'
 
 const CHATLUNA_TIMEOUT = 10000
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
 
-export class MinimaxVitsTool {
-  constructor(protected ctx: Context, protected config: ConfigType) {}
+export const VITS_TOOL_SCHEMA = z.object({
+  text: z.string().min(1).max(500).describe('要转换成语音的自然语言文本。只传需要朗读的内容，不要包含动作描写、代码块或解释。'),
+  voiceId: z.string().optional().describe('可选语音 ID；不填时使用插件默认音色。'),
+  speed: z.number().min(0.5).max(2).optional().describe('可选语速，0.5 到 2.0。'),
+})
 
-  async call(input: string, toolConfig?: any): Promise<string> {
-    return ''
+function normalizePathPart(value: string | undefined, fallback: string) {
+  const text = String(value || fallback || '').trim() || fallback
+  return text.startsWith('/') ? text : `/${text}`
+}
+
+function buildPublicUrl(config: ConfigType, fileName: string) {
+  const localPath = normalizePathPart(config.tool?.localPublicPath, '/minimax-vits')
+  const base = String(config.tool?.publicBaseUrl || config.publicBaseUrl || '').trim().replace(/\/$/, '')
+  const publicPath = `${localPath}/audio/${encodeURIComponent(fileName)}`
+  return base ? `${base}${publicPath}` : publicPath
+}
+
+export class MinimaxVitsTool extends StructuredTool {
+  name: string
+  description: string
+  schema: any = VITS_TOOL_SCHEMA
+
+  constructor(
+    protected ctx: Context,
+    protected config: ConfigType,
+    protected cacheManager?: AudioCacheManager,
+  ) {
+    super({})
+    this.name = config.tool?.name?.trim() || 'minimax_vits_speech'
+    this.description = config.tool?.description?.trim()
+      || 'Convert selected assistant dialogue text into a MiniMax VITS audio message. Use only when the user wants voice output or when speaking aloud would improve the reply.'
+  }
+
+  async _call(input: z.infer<typeof VITS_TOOL_SCHEMA>): Promise<string> {
+    const logger = this.ctx.logger('minimax-vits')
+    const text = String(input?.text || '').trim()
+    if (!text) {
+      return JSON.stringify({ ok: false, error: 'text is required' }, null, 2)
+    }
+
+    const voiceId = String(input?.voiceId || this.config.defaultVoice || 'Chinese_female_gentle').trim()
+    const runtimeConfig: ConfigType = {
+      ...this.config,
+      speed: input?.speed ?? this.config.speed,
+      audioFormat: 'mp3',
+    }
+    const buffer = await generateSpeech(this.ctx, runtimeConfig, text, voiceId, this.cacheManager)
+    if (!buffer || buffer.length === 0) {
+      return JSON.stringify({ ok: false, error: 'MiniMax TTS generation failed', voiceId, text }, null, 2)
+    }
+
+    const hash = createHash('sha256').update(JSON.stringify({
+      voiceId,
+      text,
+      speed: runtimeConfig.speed,
+      vol: runtimeConfig.vol,
+      pitch: runtimeConfig.pitch,
+      model: runtimeConfig.speechModel,
+      sampleRate: runtimeConfig.sampleRate,
+      bitrate: runtimeConfig.bitrate,
+      format: 'mp3',
+    })).digest('hex').slice(0, 32)
+    const fileName = `${hash}.mp3`
+    const dir = path.resolve(this.ctx.baseDir, this.config.tool?.outputDir || './data/minimax-vits/tool')
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(path.join(dir, fileName), buffer)
+
+    const audioUrl = buildPublicUrl(this.config, fileName)
+    logger.info(`ChatLuna VITS tool generated audio: ${fileName}, bytes=${buffer.length}`)
+    return JSON.stringify({
+      ok: true,
+      text,
+      voiceId,
+      audioUrl,
+      audioElement: `<audio src="${audioUrl}"/>`,
+      bytes: buffer.length,
+      format: 'mp3',
+      instruction: 'Send audioElement to the user when you want to deliver the generated voice. Do not repeat the raw JSON to the user.',
+    }, null, 2)
   }
 }
 
