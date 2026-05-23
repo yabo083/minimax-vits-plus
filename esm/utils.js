@@ -124,7 +124,7 @@ export async function removeTempFile(filePath) {
     }
 }
 export async function convertToSilk(buffer, logger) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     try {
         const silk = await import('silk-wasm');
         const encode = silk.encode || ((_a = silk.default) === null || _a === void 0 ? void 0 : _a.encode);
@@ -132,11 +132,24 @@ export async function convertToSilk(buffer, logger) {
             (_b = logger === null || logger === void 0 ? void 0 : logger.warn) === null || _b === void 0 ? void 0 : _b.call(logger, 'silk-wasm encode function is unavailable');
             return null;
         }
-        const result = await encode(buffer, 24000);
-        return Buffer.from((_c = result === null || result === void 0 ? void 0 : result.data) !== null && _c !== void 0 ? _c : result);
+        const isWav = silk.isWav || ((_c = silk.default) === null || _c === void 0 ? void 0 : _c.isWav);
+        const getWavFileInfo = silk.getWavFileInfo || ((_d = silk.default) === null || _d === void 0 ? void 0 : _d.getWavFileInfo);
+        let sampleRate = 24000;
+        if (typeof isWav === 'function' && isWav(buffer)) {
+            sampleRate = 0;
+            try {
+                const info = typeof getWavFileInfo === 'function' ? getWavFileInfo(buffer) : undefined;
+                (_e = logger === null || logger === void 0 ? void 0 : logger.debug) === null || _e === void 0 ? void 0 : _e.call(logger, `SILK conversion detected WAV input, sampleRate=${(_g = (_f = info === null || info === void 0 ? void 0 : info.fmt) === null || _f === void 0 ? void 0 : _f.sampleRate) !== null && _g !== void 0 ? _g : 'unknown'}`);
+            }
+            catch {
+                // ignore metadata logging failures
+            }
+        }
+        const result = await encode(buffer, sampleRate);
+        return Buffer.from((_h = result === null || result === void 0 ? void 0 : result.data) !== null && _h !== void 0 ? _h : result);
     }
     catch (error) {
-        (_d = logger === null || logger === void 0 ? void 0 : logger.warn) === null || _d === void 0 ? void 0 : _d.call(logger, 'SILK conversion failed:', error);
+        (_j = logger === null || logger === void 0 ? void 0 : logger.warn) === null || _j === void 0 ? void 0 : _j.call(logger, 'SILK conversion failed:', error);
         return null;
     }
 }

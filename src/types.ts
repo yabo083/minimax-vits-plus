@@ -11,6 +11,7 @@ export interface Config {
   speed: number
   vol: number
   pitch: number
+  emotion?: 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised' | 'neutral'
   audioFormat: 'mp3' | 'wav'
   sampleRate: 16000 | 24000 | 32000 | 44100 | 48000
   bitrate: 64000 | 96000 | 128000 | 192000 | 256000

@@ -143,7 +143,19 @@ export async function convertToSilk(buffer: Buffer, logger?: any): Promise<Buffe
       logger?.warn?.('silk-wasm encode function is unavailable')
       return null
     }
-    const result = await encode(buffer, 24000)
+    const isWav = (silk as any).isWav || (silk as any).default?.isWav
+    const getWavFileInfo = (silk as any).getWavFileInfo || (silk as any).default?.getWavFileInfo
+    let sampleRate = 24000
+    if (typeof isWav === 'function' && isWav(buffer)) {
+      sampleRate = 0
+      try {
+        const info = typeof getWavFileInfo === 'function' ? getWavFileInfo(buffer) : undefined
+        logger?.debug?.(`SILK conversion detected WAV input, sampleRate=${info?.fmt?.sampleRate ?? 'unknown'}`)
+      } catch {
+        // ignore metadata logging failures
+      }
+    }
+    const result = await encode(buffer, sampleRate)
     return Buffer.from(result?.data ?? result)
   } catch (error) {
     logger?.warn?.('SILK conversion failed:', error)

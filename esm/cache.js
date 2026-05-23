@@ -68,7 +68,8 @@ export class AudioCacheManager {
         if (!this.options.enabled)
             return;
         const hash = this.calculateHash(text, voiceId, params);
-        const fileName = `${hash}.mp3`; // 简单处理，假设mp3
+        const format = (params === null || params === void 0 ? void 0 : params.format) === 'wav' ? 'wav' : 'mp3';
+        const fileName = `${hash}.${format}`;
         const filePath = path.join(this.root, fileName);
         try {
             await fs.promises.writeFile(filePath, buffer);

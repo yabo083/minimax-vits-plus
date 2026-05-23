@@ -182,6 +182,15 @@ export const schema: Schema<ConfigType> = Schema.object({
   speed: Schema.number().default(1.0).min(0.5).max(2.0).description('语速'),
   vol: Schema.number().default(1.0).min(0.0).max(2.0).description('音量'),
   pitch: Schema.number().default(0).min(-12).max(12).description('音调'),
+  emotion: Schema.union([
+    Schema.const('neutral').description('中性'),
+    Schema.const('happy').description('开心'),
+    Schema.const('sad').description('悲伤'),
+    Schema.const('angry').description('愤怒'),
+    Schema.const('fearful').description('害怕'),
+    Schema.const('disgusted').description('厌恶'),
+    Schema.const('surprised').description('惊讶'),
+  ]).description('情绪控制；MiniMax speech-2.8 系列支持，留空则不传递'),
   audioFormat: Schema.union([
     Schema.const('mp3').description('MP3 格式'),
     Schema.const('wav').description('WAV 格式')

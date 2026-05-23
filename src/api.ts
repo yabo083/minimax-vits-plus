@@ -65,6 +65,10 @@ export async function generateSpeech(
       }
     }
 
+    if (config.emotion && config.emotion !== 'neutral') {
+      payload.voice_setting.emotion = config.emotion
+    }
+
     // 仅在配置明确设置时添加 language_boost
     if (config.languageBoost && config.languageBoost !== 'auto') {
       payload.language_boost = config.languageBoost
